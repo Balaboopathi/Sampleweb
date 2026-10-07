@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generative AI Quiz Portal</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+body{min-height:100vh;background:linear-gradient(135deg,#16002f,#24105c,#003b5c);color:#fff;padding:18px}
+.container{max-width:850px;margin:auto}
+.card{background:rgba(255,255,255,.10);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.18);border-radius:24px;padding:25px;box-shadow:0 15px 40px rgba(0,0,0,.3)}
+h1{font-size:28px;text-align:center;margin-bottom:8px}
+.sub{text-align:center;color:#d9d6ff;margin-bottom:22px}
+input,button{width:100%;padding:13px;border-radius:12px;border:0;margin-top:10px;font-size:16px}
+input{background:#fff;color:#222}
+button{background:linear-gradient(90deg,#00e5ff,#8b5cf6);color:#fff;font-weight:bold;cursor:pointer}
+button:hover{opacity:.9}
+.hidden{display:none}.filebox button:disabled{opacity:.55;cursor:not-allowed}
+.error{color:#ffb4b4;margin-top:10px;text-align:center}
+.success{color:#a7f3d0;margin-top:10px;text-align:center}
+.top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.badge{padding:8px 12px;background:rgba(255,255,255,.12);border-radius:20px}
+.question{font-size:21px;line-height:1.45;margin:18px 0}
+.option{display:block;background:rgba(255,255,255,.09);padding:14px;border-radius:14px;margin:10px 0;cursor:pointer;border:1px solid transparent}
+.option:hover{border-color:#00e5ff}
+.option input{width:auto;margin-right:10px}
+.feedback{margin-top:16px;padding:14px;border-radius:14px;line-height:1.5}
+.correct{background:rgba(34,197,94,.2);border:1px solid #22c55e}
+.wrong{background:rgba(239,68,68,.2);border:1px solid #ef4444}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.actions button:last-child{background:linear-gradient(90deg,#ff7a18,#ff3d81)}
+.score{font-size:42px;text-align:center;font-weight:bold;margin:20px}
+.small{font-size:13px;color:#d9d6ff;line-height:1.5;margin-top:12px}
+.filebox{margin-top:18px;padding:18px;border:2px dashed rgba(255,255,255,.35);border-radius:18px;text-align:center}.filebox button{font-size:17px;padding:15px}
+label.title{display:block;margin-top:12px;font-weight:bold}
+@media(max-width:600px){body{padding:10px}.card{padding:18px}h1{font-size:23px}.question{font-size:18px}.actions{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div id="login" class="card">
+<h1>🤖 Generative AI Quiz</h1>
+<p class="sub">Student Login Portal</p>
+<label class="title">Student ID</label>
+<input id="studentId" placeholder="Enter Student ID">
+<label class="title">Password</label>
+<input id="password" type="password" placeholder="Enter Password">
+<button onclick="login()">🔐 Login</button>
+<p class="small">Demo Login: <b>student</b> / <b>1234</b></p>
+<p id="loginMsg" class="error"></p>
+</div>
+
+<div id="setup" class="card hidden">
+<h1>📚 Quiz Setup</h1>
+<p class="sub">Choose the sample quiz or upload your own PDF/PPTX.</p>
+<div class="filebox">
+<input id="fileInput" type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx" style="display:none" onchange="fileSelected()">
+<button type="button" onclick="openFilePicker()">📂 Choose PDF / PPTX File</button>
+<button type="button" id="uploadBtn" onclick="loadUploadedFile()" disabled>🚀 Upload & Create Quiz</button>
+<p id="selectedFile" class="small">No file selected</p>
+<p id="fileMsg" class="small"></p>
+</div>
+<button onclick="startQuiz(sampleQuestions)">▶ Start Sample 70 Questions</button>
+<p class="small">Answers stay hidden until you submit each question.</p>
+</div>
+
+<div id="quiz" class="card hidden">
+<div class="top">
+<span id="progress" class="badge"></span>
+<span id="scoreNow" class="badge">Score: 0</span>
+</div>
+<div id="question" class="question"></div>
+<div id="options"></div>
+<div id="feedback"></div>
+<div class="actions">
+<button id="submitBtn" onclick="submitAnswer()">✅ Submit Answer</button>
+<button id="nextBtn" class="hidden" onclick="nextQuestion()">➡ Next</button>
+</div>
+</div>
+
+<div id="result" class="card hidden">
+<h1>🎉 Quiz Completed!</h1>
+<div id="finalScore" class="score"></div>
+<p id="finalText" class="sub"></p>
+<button onclick="restart()">🔄 Back to Quiz Setup</button>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const sampleQuestions = [{"q": "What is Generative AI?", "options": ["AI that creates new content", "AI that only stores data", "AI that deletes data", "AI that only searches the web"], "answer": "A"}, {"q": "Which of the following is an example of Generative AI?", "options": ["ChatGPT", "Calculator", "File Manager", "Clock"], "answer": "A"}, {"q": "What does GPT stand for?", "options": ["Generative Pre-trained Transformer", "General Processing Tool", "Graphical Processing Technology", "Generated Program Tool"], "answer": "A"}, {"q": "Which company developed ChatGPT?", "options": ["OpenAI", "Google", "Microsoft", "Apple"], "answer": "A"}, {"q": "What can Generative AI create?", "options": ["Text, images, audio and more", "Only text", "Only numbers", "Only websites"], "answer": "A"}, {"q": "What is a prompt?", "options": ["An instruction given to an AI", "An AI-generated image", "A computer virus", "A type of hardware"], "answer": "A"}, {"q": "Which is a good prompt?", "options": ["Explain photosynthesis in simple words", "Do something", "AI", "Help"], "answer": "A"}, {"q": "Why are clear prompts useful?", "options": ["They help AI understand the task", "They make the computer faster", "They delete errors", "They reduce storage"], "answer": "A"}, {"q": "What is an AI chatbot?", "options": ["A program that communicates with users", "A printer", "A database", "A keyboard"], "answer": "A"}, {"q": "Which is a popular AI chatbot?", "options": ["ChatGPT", "Paint", "Notepad", "Calculator"], "answer": "A"}, {"q": "What is an AI image generator used for?", "options": ["Creating images from prompts", "Editing spreadsheets only", "Sending emails only", "Playing music only"], "answer": "A"}, {"q": "Which type of content can AI image generators create?", "options": ["Pictures and artwork", "Only text files", "Only tables", "Only passwords"], "answer": "A"}, {"q": "What is text generation?", "options": ["Creating written content using AI", "Scanning a document", "Deleting text", "Printing a book"], "answer": "A"}, {"q": "Which task can Generative AI help with?", "options": ["Writing and brainstorming", "Charging a phone", "Repairing hardware", "Connecting cables"], "answer": "A"}, {"q": "What is brainstorming?", "options": ["Generating ideas", "Deleting files", "Formatting a disk", "Installing RAM"], "answer": "A"}, {"q": "What is AI hallucination?", "options": ["When AI gives incorrect or made-up information", "When AI turns off", "When AI creates a picture", "When AI saves a file"], "answer": "A"}, {"q": "Why should AI-generated information be checked?", "options": ["AI can make mistakes", "AI never works", "AI has no language ability", "AI cannot generate text"], "answer": "A"}, {"q": "What is personalization in AI?", "options": ["Adapting output to a user's needs", "Deleting user data", "Changing hardware", "Turning off AI"], "answer": "A"}, {"q": "Which is useful for studying?", "options": ["Using AI to explain difficult topics", "Using AI to avoid learning", "Deleting notes", "Ignoring teachers"], "answer": "A"}, {"q": "Can Generative AI summarize text?", "options": ["Yes", "No", "Only sometimes for numbers", "Only without a prompt"], "answer": "A"}, {"q": "What is translation?", "options": ["Changing text from one language to another", "Creating a password", "Deleting a language", "Changing a file type"], "answer": "A"}, {"q": "Can Generative AI help with translation?", "options": ["Yes", "No", "Only for English", "Only for programming"], "answer": "A"}, {"q": "What is coding assistance?", "options": ["Helping write or explain computer programs", "Repairing a monitor", "Printing code", "Selling software"], "answer": "A"}, {"q": "Which language can Generative AI help write code in?", "options": ["Python", "Only HTML", "Only C", "Only Java"], "answer": "A"}, {"q": "What is an AI model?", "options": ["A system trained to perform tasks using data", "A computer screen", "A keyboard", "A web browser"], "answer": "A"}, {"q": "What is training data?", "options": ["Data used to train an AI model", "Data deleted by AI", "A password", "A graphics card"], "answer": "A"}, {"q": "What is machine learning?", "options": ["A method where computers learn patterns from data", "Manual typing", "File compression", "Web browsing"], "answer": "A"}, {"q": "What is Deep Learning?", "options": ["A type of machine learning using neural networks", "A database system", "A search engine", "A programming editor"], "answer": "A"}, {"q": "What is a neural network inspired by?", "options": ["The human brain", "A printer", "A keyboard", "A camera"], "answer": "A"}, {"q": "What is multimodal AI?", "options": ["AI that can work with multiple types of input or output", "AI that only reads text", "AI without data", "AI that only works offline"], "answer": "A"}, {"q": "Which can be a multimodal input?", "options": ["Text and images", "Only numbers", "Only passwords", "Only files"], "answer": "A"}, {"q": "What is speech generation?", "options": ["Creating spoken audio using AI", "Typing text", "Scanning images", "Creating tables"], "answer": "A"}, {"q": "What is speech recognition?", "options": ["Converting spoken language into text", "Creating images", "Deleting audio", "Writing code only"], "answer": "A"}, {"q": "What is an AI assistant?", "options": ["A tool that helps users perform tasks", "A hardware device", "A game console", "A storage drive"], "answer": "A"}, {"q": "Which is an example of responsible AI use?", "options": ["Checking AI output before using it", "Sharing private information", "Copying everything blindly", "Using false information"], "answer": "A"}, {"q": "Why is privacy important when using AI?", "options": ["Personal information should be protected", "AI needs every password", "Privacy slows computers", "Privacy is unnecessary"], "answer": "A"}, {"q": "What should you avoid sharing with AI?", "options": ["Sensitive personal information", "A general question", "A school topic", "A public fact"], "answer": "A"}, {"q": "What is plagiarism?", "options": ["Using someone else's work without proper credit", "Creating your own work", "Reading a book", "Taking notes"], "answer": "A"}, {"q": "Can AI-generated content raise plagiarism concerns?", "options": ["Yes", "No", "Never", "Only offline"], "answer": "A"}, {"q": "What is a citation?", "options": ["A reference to a source", "An AI model", "A password", "A computer part"], "answer": "A"}, {"q": "Why are citations important?", "options": ["They show where information came from", "They make AI faster", "They hide sources", "They delete errors"], "answer": "A"}, {"q": "What is fact-checking?", "options": ["Verifying information using reliable sources", "Copying information", "Generating images", "Changing fonts"], "answer": "A"}, {"q": "Which source is generally useful for checking facts?", "options": ["Reliable and authoritative sources", "Random posts only", "Unknown messages", "Unverified comments"], "answer": "A"}, {"q": "What is bias in AI?", "options": ["A systematic unfair preference or tendency in output", "A computer shutdown", "A file type", "A network cable"], "answer": "A"}, {"q": "Why can AI have bias?", "options": ["Training data and design can contain biases", "AI has no data", "AI cannot learn", "Computers have feelings"], "answer": "A"}, {"q": "What is ChatGPT based on?", "options": ["GPT models", "A calculator", "A spreadsheet", "A printer"], "answer": "A"}, {"q": "According to the module, ChatGPT began with GPT-1 in:", "options": ["2018", "2015", "2020", "2023"], "answer": "B"}, {"q": "What is a Large Language Model (LLM)?", "options": ["A model trained on large amounts of text", "A small calculator", "A database table", "A photo editor"], "answer": "A"}, {"q": "What does an LLM mainly work with?", "options": ["Language and text", "Only images", "Only audio", "Only hardware"], "answer": "A"}, {"q": "What is prompt engineering?", "options": ["Designing effective prompts for AI", "Building computer hardware", "Installing software", "Deleting prompts"], "answer": "A"}, {"q": "Which prompt is more specific?", "options": ["Write a 100-word summary of photosynthesis for a school student", "Tell me something", "Explain", "Write"], "answer": "A"}, {"q": "What is zero-shot prompting?", "options": ["Asking AI to perform a task without examples", "Giving many examples", "Training a model", "Deleting data"], "answer": "A"}, {"q": "What is few-shot prompting?", "options": ["Providing a few examples to guide the AI", "Using no prompt", "Using hardware", "Deleting the model"], "answer": "A"}, {"q": "What is a chatbot conversation context?", "options": ["Information from the conversation used to respond", "A computer cable", "A password", "A graphics card"], "answer": "A"}, {"q": "What is content generation?", "options": ["Creating new content with AI", "Deleting content", "Storing only files", "Formatting a disk"], "answer": "A"}, {"q": "Which is an example of AI-generated creative content?", "options": ["A story created from a prompt", "A physical notebook", "A keyboard", "A USB cable"], "answer": "A"}, {"q": "What is image-to-text AI?", "options": ["AI that can understand or extract text from images", "AI that prints images", "AI that deletes photos", "AI that only creates music"], "answer": "A"}, {"q": "What is text-to-image AI?", "options": ["AI that creates images from text prompts", "AI that reads only numbers", "AI that creates databases", "AI that scans keyboards"], "answer": "A"}, {"q": "What is text-to-speech?", "options": ["Converting written text into spoken audio", "Converting speech into text", "Creating a spreadsheet", "Deleting audio"], "answer": "A"}, {"q": "What is speech-to-text?", "options": ["Converting spoken audio into written text", "Creating images", "Generating passwords", "Formatting text"], "answer": "A"}, {"q": "How can Generative AI help in presentations?", "options": ["It can help create ideas and draft content", "It can replace a projector", "It can repair a screen", "It can print slides automatically"], "answer": "A"}, {"q": "How can AI help with email writing?", "options": ["It can draft or improve messages", "It can deliver physical mail", "It can repair email servers", "It can create an inbox"], "answer": "A"}, {"q": "What is the role of a human when using Generative AI?", "options": ["Review and guide the AI output", "Do nothing", "Trust every answer blindly", "Never check information"], "answer": "A"}, {"q": "What is responsible AI use?", "options": ["Using AI safely, ethically and thoughtfully", "Using AI without checking", "Sharing private data", "Ignoring copyright"], "answer": "A"}, {"q": "Can Generative AI replace human judgment completely?", "options": ["No", "Yes", "Always", "Only in school"], "answer": "A"}, {"q": "What is an AI-generated recommendation?", "options": ["A suggestion produced by an AI system", "A hardware repair", "A password", "A network cable"], "answer": "A"}, {"q": "Why should recommendations be evaluated?", "options": ["They may not always be suitable or correct", "They are always perfect", "They cannot contain errors", "They never use data"], "answer": "A"}, {"q": "In education, Generative AI can help create:", "options": ["Quizzes and learning materials", "Only attendance records", "Only hardware", "Only passwords"], "answer": "A"}, {"q": "The best basic practice when using AI-generated information is to:", "options": ["Check and personalize the output", "Accept everything without checking", "Share private data", "Ignore reliable sources"], "answer": "A"}];
+let quizData=[], current=0, score=0, answered=false;
+
+function login(){
+ const id=document.getElementById('studentId').value.trim();
+ const pw=document.getElementById('password').value;
+ if(id==='student' && pw==='1234'){
+   document.getElementById('login').classList.add('hidden');
+   document.getElementById('setup').classList.remove('hidden');
+ }else{
+   document.getElementById('loginMsg').textContent='Invalid Student ID or Password.';
+ }
+}
+
+function startQuiz(data){
+ quizData=data.map(x=>({...x,options:[...x.options]}));
+ current=0;score=0;answered=false;
+ document.getElementById('setup').classList.add('hidden');
+ document.getElementById('result').classList.add('hidden');
+ document.getElementById('quiz').classList.remove('hidden');
+ showQuestion();
+}
+
+function shuffle(arr){
+ for(let i=arr.length-1;i>0;i--){
+  const j=Math.floor(Math.random()*(i+1));
+  [arr[i],arr[j]]=[arr[j],arr[i]];
+ }
+ return arr;
+}
+
+function showQuestion(){
+ answered=false;
+ const q=quizData[current];
+ q.shuffled=shuffle(q.options.map((text,i)=>({text,original:i})));
+ document.getElementById('progress').textContent=`Question ${current+1} / ${quizData.length}`;
+ document.getElementById('scoreNow').textContent=`Score: ${score}`;
+ document.getElementById('question').textContent=q.q;
+ document.getElementById('feedback').innerHTML='';
+ document.getElementById('submitBtn').classList.remove('hidden');
+ document.getElementById('nextBtn').classList.add('hidden');
+ document.getElementById('options').innerHTML=q.shuffled.map((o,i)=>`
+ <label class="option"><input type="radio" name="answer" value="${i}">
+ ${String.fromCharCode(65+i)}. ${escapeHtml(o.text)}</label>`).join('');
+}
+
+function submitAnswer(){
+ if(answered)return;
+ const selected=document.querySelector('input[name="answer"]:checked');
+ if(!selected){
+  document.getElementById('feedback').innerHTML='<div class="feedback wrong">Please select an option first.</div>';
+  return;
+ }
+ answered=true;
+ const selectedText=quizData[current].shuffled[Number(selected.value)].text;
+ const q=quizData[current];
+ const correctIndex=q.answer.charCodeAt(0)-65;
+ const correctText=q.options[correctIndex];
+
+ if(selectedText===correctText){
+  score++;
+  document.getElementById('feedback').innerHTML='<div class="feedback correct">✅ Correct!</div>';
+ }else{
+  document.getElementById('feedback').innerHTML=
+  `<div class="feedback wrong">❌ Wrong.<br>Correct answer:
+  <b>${q.answer}. ${escapeHtml(correctText)}</b></div>`;
+ }
+ document.getElementById('scoreNow').textContent=`Score: ${score}`;
+ document.getElementById('submitBtn').classList.add('hidden');
+ document.getElementById('nextBtn').classList.remove('hidden');
+}
+
+function nextQuestion(){
+ current++;
+ if(current>=quizData.length)showResult();
+ else showQuestion();
+}
+
+function showResult(){
+ document.getElementById('quiz').classList.add('hidden');
+ document.getElementById('result').classList.remove('hidden');
+ document.getElementById('finalScore').textContent=`${score} / ${quizData.length}`;
+ document.getElementById('finalText').textContent=
+ `Your score is ${Math.round(score/quizData.length*100)}%. Great job!`;
+}
+
+function restart(){
+ document.getElementById('result').classList.add('hidden');
+ document.getElementById('setup').classList.remove('hidden');
+}
+
+function escapeHtml(s){
+ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+
+
+function openFilePicker(){
+  const input=document.getElementById('fileInput');
+  input.value='';
+  input.click();
+}
+
+function fileSelected(){
+  const file=document.getElementById('fileInput').files[0];
+  const selected=document.getElementById('selectedFile');
+  const btn=document.getElementById('uploadBtn');
+  if(file){
+    selected.textContent='Selected: '+file.name;
+    btn.disabled=false;
+    btn.style.opacity='1';
+  }else{
+    selected.textContent='No file selected';
+    btn.disabled=true;
+    btn.style.opacity='.55';
+  }
+}
+
+async function loadUploadedFile(){
+ const file=document.getElementById('fileInput').files[0];
+ const msg=document.getElementById('fileMsg');
+ if(!file){msg.textContent='Please select a PDF or PPTX file.';return;}
+ msg.textContent='Reading file...';
+ try{
+  let text='';
+  if(file.name.toLowerCase().endsWith('.pdf'))text=await readPDF(file);
+  else if(file.name.toLowerCase().endsWith('.pptx'))text=await readPPTX(file);
+  else throw new Error('Please upload PDF or PPTX.');
+  const parsed=parseMCQs(text);
+  if(!parsed.length)throw new Error('Could not detect MCQs. Use question + A-D options + Answer format.');
+  msg.innerHTML=`<span class="success">Found ${parsed.length} questions.</span>`;
+  startQuiz(parsed);
+ }catch(e){msg.textContent='Upload failed: '+e.message;}
+}
+
+async function readPDF(file){
+ const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+ let text='';
+ for(let p=1;p<=pdf.numPages;p++){
+  const page=await pdf.getPage(p);
+  const content=await page.getTextContent();
+  text+=' '+content.items.map(x=>x.str).join(' ');
+ }
+ return text;
+}
+
+async function readPPTX(file){
+ const zip=await JSZip.loadAsync(await file.arrayBuffer());
+ const names=Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n));
+ names.sort((a,b)=>parseInt(a.match(/slide(\d+)/)[1])-parseInt(b.match(/slide(\d+)/)[1]));
+ let text='';
+ for(const name of names){
+  const xml=await zip.files[name].async('text');
+  const doc=new DOMParser().parseFromString(xml,'application/xml');
+  text+=' '+Array.from(doc.getElementsByTagName('a:t')).map(x=>x.textContent).join(' ');
+ }
+ return text;
+}
+
+function parseMCQs(raw){
+ const text=raw.replace(/\s+/g,' ').trim();
+ const re=/(\d+)\.\s*(.*?)\s+A\.\s*(.*?)\s+B\.\s*(.*?)\s+C\.\s*(.*?)\s+D\.\s*(.*?)\s+Answer\s*:\s*([ABCD])/gi;
+ const out=[];let m;
+ while((m=re.exec(text))!==null){
+  out.push({q:m[2].trim(),options:[m[3].trim(),m[4].trim(),m[5].trim(),m[6].trim()],answer:m[7].toUpperCase()});
+ }
+ return out;
+}
+</script>
+</body>
+</html>
